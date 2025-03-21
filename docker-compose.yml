@@ -44,6 +44,7 @@ services:
       - ckan_storage:/var/lib/ckan
       - pip_cache:/root/.cache/pip
       - site_packages:/usr/lib/python3.10/site-packages
+      - ./ckan/src:/srv/app/src/ckan/ckan
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:5000/api/action/status_show"]
@@ -68,6 +69,8 @@ services:
       context: postgresql/
     networks:
       - dbnet
+    ports:
+      - "0.0.0.0:5432:5432"
     environment:
       - POSTGRES_USER
       - POSTGRES_PASSWORD
@@ -108,6 +111,5 @@ networks:
   solrnet:
     internal: true
   dbnet:
-    internal: true
   redisnet:
     internal: true
