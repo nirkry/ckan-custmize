@@ -5,7 +5,7 @@ FROM ckan/ckan-base:2.11
 
 # Copy custom initialization scripts
 COPY --chown=ckan-sys:ckan-sys docker-entrypoint.d/* /docker-entrypoint.d/
-COPY --chown=ckan-sys:ckan-sys config/ckan.ini /srv/app/
+# COPY --chown=ckan:ckan-sys config/ckan.ini /srv/app/
 
 # Apply any patches needed to CKAN core or any of the built extensions (not the
 # runtime mounted ones)
