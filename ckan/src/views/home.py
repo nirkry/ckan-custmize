@@ -15,11 +15,20 @@ from ckan.lib.helpers import helper_functions as h
 from ckan.common import g, config, current_user, _
 from ckan.types import Context, Response
 
+# customize field
+import logging
+from ckan import logic
+from ckan.lib.search import (
+    SearchError, SearchQueryError, SearchIndexError, SolrConnectionError
+)
+
 
 CACHE_PARAMETERS = [u'__cache', u'__no_cache__']
 
 
 home = Blueprint(u'home', __name__)
+
+log = logging.getLogger(__name__)
 
 
 def index() -> str:
@@ -73,6 +82,31 @@ def index() -> str:
                 u' if you need to reset your password.') \
             % config.get(u'ckan.site_title')
         h.flash_notice(msg, allow_html=True)
+    
+    # to render popular dataset in home
+    data_dict: dict[str, Any] = {
+        u'rows': 5,
+        u'sort': u"views_recent desc",
+    }
+
+    try:
+        datasets = logic.get_action(u'package_search')(context, data_dict)[u'results']
+        extra_vars[u'popular_datasets'] = datasets
+    except SearchQueryError as se:
+        log.info(u'Dataset search query rejected: %r', se.args)
+        base.abort(
+            400,
+            _(u'Invalid search query: {error_message}')
+            .format(error_message=str(se))
+        )
+    except (SearchError, SolrConnectionError) as se:
+        if isinstance(se, SolrConnectionError):
+            base.abort(500, se.args[0])
+        log.error(u'Dataset search error: %r', se.args)
+        extra_vars[u'query_error'] = True
+        extra_vars[u'search_facets'] = {}
+        extra_vars[u'page'] = Page(collection=[])
+
     return base.render(u'home/index.html', extra_vars=extra_vars)
 
 

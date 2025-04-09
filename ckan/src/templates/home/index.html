@@ -25,6 +25,10 @@
             {% snippet 'home/snippets/search.html', search_facets=search_facets %}
             {% endblock %}
           </div>
+          <div class="popular-datasets">
+            <h2>人気のデータセット</h2>
+            {% snippet 'snippets/package_list.html', packages=popular_datasets %}
+          </div>
         </div>
       </div>
     </div>
