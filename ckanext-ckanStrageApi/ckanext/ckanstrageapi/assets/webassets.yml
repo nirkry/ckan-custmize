@@ -1,0 +1,14 @@
+# ckanstrageapi-js:
+#   filter: rjsmin
+#   output: ckanext-ckanstrageapi/%(version)s-ckanstrageapi.js
+#   contents:
+#     - js/ckanstrageapi.js
+#   extra:
+#     preload:
+#       - base/main
+
+# ckanstrageapi-css:
+#   filter: cssrewrite
+#   output: ckanext-ckanstrageapi/%(version)s-ckanstrageapi.css
+#   contents:
+#     - css/ckanstrageapi.css
