@@ -111,5 +111,24 @@
     // モーダル表示
     const modal = document.getElementById('modal-overlay');
     modal.style.display = 'flex';
+
+    fetch('/api/resource/store', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ resource_id: 'sample' })
+  })
+  .then(response => response.json())
+  .then(data => {
+    // 処理後モーダルを非表示に
+    alert('データ格納が完了しました');
+    modal.style.display = 'none';
+  })
+  .catch(error => {
+    console.error('エラー:', error);
+    alert('処理中にエラーが発生しました');
+    modal.style.display = 'none';
   });
+});
 </script>
