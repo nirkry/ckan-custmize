@@ -1,0 +1,147 @@
+#!python
+# -*- coding: utf-8 -*-
+
+# ========= 設定（ここだけ変えればOK） =========
+STATUS_CODE    = 200          # 例: 200, 201, 400, 401, 403, 404, 500 ...
+SLEEP_SECONDS  = 0.0          # 応答までの遅延（秒）
+LOG_DIR        = None         # 例: r"C:\inetpub\wwwroot\cgi_logs"
+                              # None の場合は、このスクリプトの隣に "request_logs" を作成
+# =============================================
+
+import os
+import sys
+import io
+import time
+import json
+import uuid
+from datetime import datetime
+from http import HTTPStatus
+from urllib.parse import parse_qs
+
+# --- ユーティリティ ---
+def _status_line(code: int) -> str:
+    try:
+        phrase = HTTPStatus(code).phrase
+    except Exception:
+        phrase = "Custom"
+    return f"{code} {phrase}"
+
+def _get_log_dir() -> str:
+    if LOG_DIR:
+        return LOG_DIR
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(here, "request_logs")
+
+def _read_body() -> bytes:
+    try:
+        length = int(os.environ.get("CONTENT_LENGTH") or "0")
+    except ValueError:
+        length = 0
+    if length <= 0:
+        return b""
+    # IIS でも生の stdin から読み取る
+    return sys.stdin.buffer.read(length)
+
+def _collect_headers_from_environ(env: dict) -> dict:
+    # CGI では HTTP_ で始まる環境変数がヘッダ
+    headers = {}
+    for k, v in env.items():
+        if k.startswith("HTTP_"):
+            # 例: HTTP_USER_AGENT -> User-Agent
+            name = k[5:].replace("_", "-").title()
+            headers[name] = v
+    # Content-Type/Length は別名で入ることが多い
+    if "CONTENT_TYPE" in env:
+        headers["Content-Type"] = env["CONTENT_TYPE"]
+    if "CONTENT_LENGTH" in env:
+        headers["Content-Length"] = env["CONTENT_LENGTH"]
+    return headers
+
+def _safe_write(path: str, data: bytes) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(data)
+
+# --- メイン処理 ---
+def main():
+    # 応答遅延
+    if SLEEP_SECONDS and SLEEP_SECONDS > 0:
+        time.sleep(SLEEP_SECONDS)
+
+    # 入力収集
+    env = dict(os.environ)
+    method = env.get("REQUEST_METHOD", "GET").upper()
+    raw_query = env.get("QUERY_STRING", "")
+    query = parse_qs(raw_query, keep_blank_values=True)
+    body_bytes = _read_body()
+
+    # 保存用ペイロード（生ボディは別ファイルにも保存）
+    headers = _collect_headers_from_environ(env)
+    now = datetime.utcnow().strftime("%Y%m%dT%H%M%S.%fZ")
+    req_id = str(uuid.uuid4())
+
+    log_base = os.path.join(_get_log_dir(), now + f"_{req_id}")
+    meta_path = log_base + "_meta.json"
+    body_path = log_base + "_body.bin"
+
+    meta = {
+        "request_id": req_id,
+        "received_utc": now,
+        "status_code_to_return": STATUS_CODE,
+        "sleep_seconds": SLEEP_SECONDS,
+        "method": method,
+        "path_info": env.get("PATH_INFO", ""),
+        "query_string": raw_query,
+        "query_params": {k: v for k, v in query.items()},
+        "headers": headers,
+        "remote_addr": env.get("REMOTE_ADDR"),
+        "server_name": env.get("SERVER_NAME"),
+        "server_port": env.get("SERVER_PORT"),
+        "server_protocol": env.get("SERVER_PROTOCOL"),
+        # 必要に応じて全環境変数も保存したい場合はコメント解除
+        # "environ": env,
+        "body_file": os.path.basename(body_path),
+        "body_length": len(body_bytes),
+    }
+
+    try:
+        _safe_write(meta_path, json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8"))
+        _safe_write(body_path, body_bytes)
+        saved = True
+        save_note = f"saved to {os.path.abspath(meta_path)} and {os.path.abspath(body_path)}"
+    except Exception as e:
+        saved = False
+        save_note = f"save failed: {type(e).__name__}: {e}"
+
+    # 応答作成（JSON）
+    response_obj = {
+        "ok": True,
+        "note": "This is a stub CGI response for IIS.",
+        "request_id": req_id,
+        "received_utc": now,
+        "echo": {
+            "method": method,
+            "query": query,
+            "headers": headers,
+            "body_preview": body_bytes[:256].decode("utf-8", errors="replace"),
+            "body_length": len(body_bytes),
+        },
+        "log": {
+            "saved": saved,
+            "detail": save_note,
+        },
+    }
+    body_text = json.dumps(response_obj, ensure_ascii=False)
+
+    # 出力（CGI ヘッダ）
+    status_line = _status_line(STATUS_CODE)
+    out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="\n")
+    print(f"Status: {status_line}", file=out)
+    print("Content-Type: application/json; charset=utf-8", file=out)
+    print("Cache-Control: no-store", file=out)
+    print("", file=out)  # ヘッダ終端
+    print(body_text, file=out)
+    out.flush()
+
+if __name__ == "__main__":
+    main()
